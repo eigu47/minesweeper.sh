@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+
+# constants
+# box ascii
+BOX_HH='═'
+BOX_VV='║'
+BOX_TL='╔'
+BOX_TR='╗'
+BOX_BR='╝'
+BOX_BL='╚'
+BOX_ML='╠'
+BOX_MT='╦'
+BOX_MR='╣'
+BOX_MB='╩'
+BOX_H='─'
+BOX_V='│'
+BOX_X='┼'
+
+# dirs
+UL=(-1 -1)
+UP=(-1 0)
+UR=(-1 1)
+RG=(0 1)
+DR=(1 1)
+DW=(1 0)
+DL=(1 -1)
+LF=(0 -1)
+DIRS=(UL UP UR RG DR DW DL LF)
+
+# colors
+GRAY='\e[100m'
+RST='\e[0m'
+
+# default state
+width=8
+height=8
+total_mines=10
+player_pos=0
+
+fatal() {
+	echo '[FATAL]:' "$*" >&2
+	exit 1
+}
+
+usage() {
+	cat <<- EOF
+		Usage: ${0##*/} <day> [part]
+		Options:
+	EOF
+
+	exit 0
+}
+
+repeat() {
+	printf -v s "%*s" "$2" ""
+	printf "%s" "${s// /$1}"
+}
+
+# xy to idx
+get_idx() {
+	local row="$1" col="$2"
+	if ((row < 0 || col < 0 || row >= width || col >= height)); then
+		return 1
+	fi
+
+	echo $((row * width + col))
+}
+
+# idx to xy
+get_grid() {
+	local idx="$1"
+	local row=$((idx / width)) col=$((idx % width))
+	if ((row < 0 || col < 0 || row >= width || col >= height)); then
+		return 1
+	fi
+
+	echo $row $col
+}
+
+# move idx by xy
+get_idx_dir() {
+	local idx="$1" x="$2" y="$3"
+	local -a grid_arr
+	read -r -a grid_arr <<<"$(get_grid "$idx")" || return 1
+	idx=$(get_idx $((grid_arr[0] + x)) $((grid_arr[1] + y))) || return 1
+	echo "$idx"
+}
+
+init_board() {
+	# initiate board
+	board=()
+	for ((i = 0; i < width * height; i++)); do
+		board+=(0)
+	done
+
+	# set mines
+	mines=()
+	local pos
+	while ((${#mines[@]} < total_mines)); do
+		pos=$((RANDOM % (width * height)))
+		[[ ${board[pos]} == '*' ]] && continue
+		board[pos]='*'
+		mines+=("$pos")
+	done
+
+	# calculate sides
+	for idx in "${mines[@]}"; do
+		# loop over all directions
+		for name in "${DIRS[@]}"; do
+			local -n dir="$name"
+			# sum 1 if is empty
+			pos=$(get_idx_dir "$idx" "${dir[@]}") || continue
+			[[ ${board[pos]} == '*' ]] && continue
+			# echo idx:$idx dir:$name pos:$pos
+			((board[pos]++))
+		done
+	done
+}
+
+draw() {
+	local grid_w=$((width * 4 - 1))
+
+	# top box
+	local grid="$BOX_TL"
+	grid+=$(repeat "$BOX_HH" $grid_w)
+	grid+="$BOX_TR\n"
+
+	# mines left + face
+	grid+="$BOX_VV  ${total_mines}"
+	grid+=$(repeat " " $((grid_w / 2 - 2 - ${#total_mines})))
+	grid+=':)'
+	grid+=$(repeat " " $((grid_w / 2 - 1)))
+	grid+="$BOX_VV\n"
+
+	# top line
+	grid+="$BOX_ML"
+	grid+=$(repeat "$BOX_HH" $grid_w)
+	grid+="$BOX_MR\n"
+
+	# rows
+	for ((h = 0; h < height; h++)); do
+		grid+="$BOX_VV"
+		for ((i = 0; i < width; i++)); do
+
+			# get cell value
+			idx=$(get_idx $h $i)
+			grid+="${GRAY} ${board[idx]} ${RST}"
+
+			((i < width - 1)) && grid+="$BOX_V"
+		done
+		grid+="$BOX_VV\n"
+
+		# row separators
+		if ((h < height - 1)); then
+			grid+="$BOX_VV"
+			for ((i = 0; i < width; i++)); do
+				grid+="$BOX_H$BOX_H$BOX_H"
+				((i < width - 1)) && grid+="$BOX_X"
+			done
+			grid+="$BOX_VV\n"
+		fi
+	done
+
+	# bottom line
+	grid+="$BOX_BL"
+	grid+=$(repeat "$BOX_HH" $grid_w)
+	grid+="$BOX_BR"
+
+	echo -e "$grid"
+}
+
+main() {
+	while getopts "h" opt; do
+		case "$opt" in
+		h) usage ;;
+		\?) fatal "invalid argument: -$OPTARG" ;;
+		esac
+	done
+	shift $((OPTIND - 1))
+
+	init_board
+
+	draw
+
+	# read -s input
+}
+
+main
