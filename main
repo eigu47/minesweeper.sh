@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# Minesweeper terminal game by Eiguchi Pablo
+# GitHub: https://github.com/eigu47/minesweeper.sh
+# Play at: curl eiguchipablo.dev/minesweeper | bash
+# More about me: curl eiguchipablo.dev
+
 # constants
 declare -Ar BOX=(
 	[HH]='═'
@@ -58,13 +63,30 @@ fatal() {
 }
 
 usage() {
-	cat <<-EOF
-		Usage: ${0##*/} <day> [part]
+	cat <<- EOF
+		Controls:
+		Arrow keys / WASD	Move the cursor around the grid (wraps edges).
+		Space				Reveal the tile under the cursor.
+		R					Reset the board (any time / after win/lose).
+		Ctrl+C				Quit the game (also restores the terminal).
+
+		Usage: ${0##*/} [-h] [-z WIDTHxHEIGHT] [-m MINES]
+
 		Options:
+		  -h               Show help message.
+		  -z WIDTHxHEIGHT  Set board size (default ${width}x${height}).
+		  -m MINES         Set the total number of mines (default ${total_mines}).
+
+		Play at: curl eiguchipablo.dev/minesweeper | bash
+		Github: https://github.com/eigu47/minesweeper.sh
+
+		More about me: curl eiguchipablo.dev
+
 	EOF
 
 	exit 0
 }
+
 
 parse_args() {
 	while getopts "hz:m:" opt; do
@@ -163,7 +185,7 @@ get_tile() {
 
 	# game over
 	if ((player_pos < 0)); then
-		if [[ ! -n ${selected[$pos]} && $val != '*' ]]; then
+		if [[ -z ${selected[$pos]} && $val != '*' ]]; then
 			color="${STYLE[GRAY]}"
 		fi
 
