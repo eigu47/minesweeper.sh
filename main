@@ -67,9 +67,18 @@ usage() {
 }
 
 parse_args() {
-	while getopts "h" opt; do
+	while getopts "hz:m:" opt; do
 		case "$opt" in
 		h) usage ;;
+		z)
+			[[ $OPTARG =~ ^([0-9]+)[xX]([0-9]+)$ ]] || usage
+			width="${BASH_REMATCH[1]}"
+			height="${BASH_REMATCH[2]}"
+			;;
+		m)
+			[[ $OPTARG =~ ^[0-9]+$ ]] || usage
+			total_mines="$OPTARG"
+			;;
 		\?) fatal "invalid argument: -$OPTARG" ;;
 		esac
 	done
@@ -118,6 +127,7 @@ init_board() {
 	mines=()
 	selected=()
 	player_pos=0
+	tput clear
 
 	# initiate board
 	local i
@@ -246,6 +256,10 @@ draw() {
 	grid+="${BOX[BR]}"
 
 	echo -e "$grid"
+
+	if ((player_pos < 0)); then
+		echo Press \'R\' to play again
+	fi
 }
 
 move_player() {
@@ -315,7 +329,7 @@ handle_input() {
 }
 
 main() {
-	parse_args
+	parse_args "$@"
 
 	# clear terminal
 	stty -echo
@@ -338,4 +352,4 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-main
+main "$@"
