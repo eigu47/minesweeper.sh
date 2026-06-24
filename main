@@ -1,41 +1,48 @@
 #!/usr/bin/env bash
 
 # constants
-# box ascii
-BOX_HH='═'
-BOX_VV='║'
-BOX_TL='╔'
-BOX_TR='╗'
-BOX_BR='╝'
-BOX_BL='╚'
-BOX_ML='╠'
-BOX_MT='╦'
-BOX_MR='╣'
-BOX_MB='╩'
-BOX_H='─'
-BOX_V='│'
-BOX_X='┼'
+declare -Ar BOX=(
+	[HH]='═'
+	[VV]='║'
+	[TL]='╔'
+	[TR]='╗'
+	[BR]='╝'
+	[BL]='╚'
+	[ML]='╠'
+	[MT]='╦'
+	[MR]='╣'
+	[MB]='╩'
+	[H]='─'
+	[V]='│'
+	[X]='┼'
+)
 
-# dirs
-UL=(-1 -1)
-UP=(-1 0)
-UR=(-1 1)
-RG=(0 1)
-DR=(1 1)
-DW=(1 0)
-DL=(1 -1)
-LF=(0 -1)
-DIRS=(UL UP UR RG DR DW DL LF)
+declare -Ar DIRS=(
+	[UL]='-1 -1'
+	[UP]='-1 0'
+	[UR]='-1 1'
+	[RG]='0 1'
+	[DR]='1 1'
+	[DW]='1 0'
+	[DL]='1 -1'
+	[LF]='0 -1'
+)
 
-# colors
-GRAY='\e[100m'
-RST='\e[0m'
+declare -Ar STYLE=(
+	[GRAY]='\e[100m'
+	[GREEN]='\e[102m'
+	[BOLD]='\e[1m'
+	[RST]='\e[0m'
+)
 
 # default state
 width=8
 height=8
 total_mines=10
 player_pos=0
+board=()
+mines=()
+declare -A selected=()
 
 fatal() {
 	echo '[FATAL]:' "$*" >&2
@@ -43,7 +50,7 @@ fatal() {
 }
 
 usage() {
-	cat <<- EOF
+	cat <<-EOF
 		Usage: ${0##*/} <day> [part]
 		Options:
 	EOF
@@ -51,7 +58,18 @@ usage() {
 	exit 0
 }
 
+parse_args() {
+	while getopts "h" opt; do
+		case "$opt" in
+		h) usage ;;
+		\?) fatal "invalid argument: -$OPTARG" ;;
+		esac
+	done
+	shift $((OPTIND - 1))
+}
+
 repeat() {
+	local s
 	printf -v s "%*s" "$2" ""
 	printf "%s" "${s// /$1}"
 }
@@ -79,16 +97,17 @@ get_grid() {
 
 # move idx by xy
 get_idx_dir() {
-	local idx="$1" x="$2" y="$3"
+	local idx="$1" dx="$2" dy="$3"
 	local -a grid_arr
 	read -r -a grid_arr <<<"$(get_grid "$idx")" || return 1
-	idx=$(get_idx $((grid_arr[0] + x)) $((grid_arr[1] + y))) || return 1
+	idx=$(get_idx $((grid_arr[0] + dx)) $((grid_arr[1] + dy))) || return 1
 	echo "$idx"
 }
 
 init_board() {
 	# initiate board
 	board=()
+	local i
 	for ((i = 0; i < width * height; i++)); do
 		board+=(0)
 	done
@@ -104,85 +123,140 @@ init_board() {
 	done
 
 	# calculate sides
+	local idx dir dx dy
 	for idx in "${mines[@]}"; do
-		# loop over all directions
-		for name in "${DIRS[@]}"; do
-			local -n dir="$name"
-			# sum 1 if is empty
-			pos=$(get_idx_dir "$idx" "${dir[@]}") || continue
-			[[ ${board[pos]} == '*' ]] && continue
-			# echo idx:$idx dir:$name pos:$pos
+		# loop over all directions, sum 1 if is empty
+		for dir in "${DIRS[@]}"; do
+			read -r dx dy <<<"$dir"
+			pos=$(get_idx_dir "$idx" "$dx" "$dy") || continue
+			[[ ${board[$pos]} == '*' ]] && continue
 			((board[pos]++))
+			# echo idx:$idx dir:$name pos:$pos
 		done
 	done
+
+	# initiate selected boxes
+	selected=()
+
+	# clear terminal
+	stty -echo
+	tput clear
+	tput civis
 }
 
 draw() {
+	# reset terminal
+	tput cup 0 0
+
 	local grid_w=$((width * 4 - 1))
 
 	# top box
-	local grid="$BOX_TL"
-	grid+=$(repeat "$BOX_HH" $grid_w)
-	grid+="$BOX_TR\n"
+	local grid="${BOX[TL]}"
+	grid+=$(repeat "${BOX[HH]}" $grid_w)
+	grid+="${BOX[TR]}\n"
 
 	# mines left + face
-	grid+="$BOX_VV  ${total_mines}"
+	grid+="${BOX[VV]}  ${total_mines}"
 	grid+=$(repeat " " $((grid_w / 2 - 2 - ${#total_mines})))
 	grid+=':)'
 	grid+=$(repeat " " $((grid_w / 2 - 1)))
-	grid+="$BOX_VV\n"
+	grid+="${BOX[VV]}\n"
 
 	# top line
-	grid+="$BOX_ML"
-	grid+=$(repeat "$BOX_HH" $grid_w)
-	grid+="$BOX_MR\n"
+	grid+="${BOX[ML]}"
+	grid+=$(repeat "${BOX[HH]}" $grid_w)
+	grid+="${BOX[MR]}\n"
 
 	# rows
+	local h i cell color idx
 	for ((h = 0; h < height; h++)); do
-		grid+="$BOX_VV"
+		grid+="${BOX[VV]}"
 		for ((i = 0; i < width; i++)); do
 
-			# get cell value
+			# default
+			cell=" "
+			color="${STYLE[GRAY]}"
 			idx=$(get_idx $h $i)
-			grid+="${GRAY} ${board[idx]} ${RST}"
 
-			((i < width - 1)) && grid+="$BOX_V"
+			# player position
+			if ((idx == player_pos)); then
+				color="${STYLE[GREEN]}"
+
+			# cell value
+			elif [[ -n "${selected[$idx]}" ]]; then
+				cell="${board[idx]}"
+			fi
+
+			grid+="$color $cell ${STYLE[RST]}"
+			((i < width - 1)) && grid+="${BOX[V]}"
 		done
-		grid+="$BOX_VV\n"
+		grid+="${BOX[VV]}\n"
 
 		# row separators
 		if ((h < height - 1)); then
-			grid+="$BOX_VV"
+			grid+="${BOX[VV]}"
 			for ((i = 0; i < width; i++)); do
-				grid+="$BOX_H$BOX_H$BOX_H"
-				((i < width - 1)) && grid+="$BOX_X"
+				grid+="${BOX[H]}${BOX[H]}${BOX[H]}"
+				((i < width - 1)) && grid+="${BOX[X]}"
 			done
-			grid+="$BOX_VV\n"
+			grid+="${BOX[VV]}\n"
 		fi
 	done
 
 	# bottom line
-	grid+="$BOX_BL"
-	grid+=$(repeat "$BOX_HH" $grid_w)
-	grid+="$BOX_BR"
+	grid+="${BOX[BL]}"
+	grid+=$(repeat "${BOX[HH]}" $grid_w)
+	grid+="${BOX[BR]}"
 
 	echo -e "$grid"
 }
 
+move_player() {
+	local dir="$1" dx dy row col
+	read -r dx dy <<<"$dir"
+	read -r row col <<<"$(get_grid "$player_pos")"
+
+	# calculate new pos, wrap-around
+	row=$(((row + dx + height) % height))
+	col=$(((col + dy + width) % width))
+	player_pos=$(get_idx "$row" "$col")
+}
+
+handle_input() {
+	local key rest
+
+	read -rsn1 key
+	if [[ $key == $'\e' ]]; then
+		read -rsn2 rest
+		key+="$rest"
+	fi
+
+	case "$key" in
+	$'\e[A') move_player "${DIRS[UP]}" ;;
+	$'\e[B') move_player "${DIRS[DW]}" ;;
+	$'\e[C') move_player "${DIRS[RG]}" ;;
+	$'\e[D') move_player "${DIRS[LF]}" ;;
+	esac
+}
+
 main() {
-	while getopts "h" opt; do
-		case "$opt" in
-		h) usage ;;
-		\?) fatal "invalid argument: -$OPTARG" ;;
-		esac
-	done
-	shift $((OPTIND - 1))
+	parse_args
 
 	init_board
-
 	draw
 
-	# read -s input
+	while true; do
+		handle_input
+		draw
+	done
 }
+
+cleanup() {
+	stty echo
+	tput sgr0
+	tput cnorm
+	exit 0
+}
+trap cleanup INT TERM EXIT
 
 main
