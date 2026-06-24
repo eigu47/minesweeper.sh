@@ -31,8 +31,16 @@ declare -Ar DIRS=(
 declare -Ar STYLE=(
 	[GRAY]='\e[100m'
 	[GREEN]='\e[102m'
-	[BOLD]='\e[1m'
 	[RST]='\e[0m'
+	[1]='\e[1;34m' # blue
+	[2]='\e[1;32m' # green
+	[3]='\e[1;31m' # red
+	[4]='\e[1;35m' # purple
+	[5]='\e[1;33m' # yellow
+	[6]='\e[1;36m' # cyan
+	[7]='\e[1;30m' # black
+	[8]='\e[1;37m' # white
+	[*]='\e[1;41m'
 )
 
 # default state
@@ -131,7 +139,6 @@ init_board() {
 			pos=$(get_idx_dir "$idx" "$dx" "$dy") || continue
 			[[ ${board[$pos]} == '*' ]] && continue
 			((board[pos]++))
-			# echo idx:$idx dir:$name pos:$pos
 		done
 	done
 
@@ -142,6 +149,26 @@ init_board() {
 	stty -echo
 	tput clear
 	tput civis
+}
+
+get_tile() {
+	local pos="$1" color cell=" "
+	local val="${board[$pos]}"
+
+	if [[ -n ${selected[$pos]} ]]; then
+		if [[ $val != '0' ]]; then
+			color="${STYLE[$val]}"
+			cell="$val"
+		fi
+	else
+		color="${STYLE[GRAY]}"
+	fi
+
+	if ((pos == player_pos)); then
+		color="${STYLE[GREEN]}"
+	fi
+
+	echo "$color $cell ${STYLE[RST]}"
 }
 
 draw() {
@@ -168,26 +195,13 @@ draw() {
 	grid+="${BOX[MR]}\n"
 
 	# rows
-	local h i cell color idx
+	local h i cell color idx val
 	for ((h = 0; h < height; h++)); do
 		grid+="${BOX[VV]}"
 		for ((i = 0; i < width; i++)); do
-
-			# default
-			cell=" "
-			color="${STYLE[GRAY]}"
+			# get tile display
 			idx=$(get_idx $h $i)
-
-			# player position
-			if ((idx == player_pos)); then
-				color="${STYLE[GREEN]}"
-
-			# cell value
-			elif [[ -n "${selected[$idx]}" ]]; then
-				cell="${board[idx]}"
-			fi
-
-			grid+="$color $cell ${STYLE[RST]}"
+			grid+=$(get_tile "$idx")
 			((i < width - 1)) && grid+="${BOX[V]}"
 		done
 		grid+="${BOX[VV]}\n"
@@ -222,20 +236,42 @@ move_player() {
 	player_pos=$(get_idx "$row" "$col")
 }
 
+select_tile() {
+	local pos="$1"
+	# already selected tiles does nothing
+	if [[ -n "${selected[$pos]}" ]]; then
+		return
+	fi
+
+	selected[$pos]=1
+	# recurse over all directions if theres no mines
+	local dir dx dy idx
+	if [[ ${board[$pos]} == '0' ]]; then
+		for dir in "${DIRS[@]}"; do
+			read -r dx dy <<<"$dir"
+			idx=$(get_idx_dir "$pos" "$dx" "$dy") || continue
+			select_tile "$idx"
+		done
+	fi
+}
+
 handle_input() {
 	local key rest
 
-	read -rsn1 key
+	IFS= read -rsn1 key
 	if [[ $key == $'\e' ]]; then
 		read -rsn2 rest
 		key+="$rest"
 	fi
 
 	case "$key" in
-	$'\e[A') move_player "${DIRS[UP]}" ;;
-	$'\e[B') move_player "${DIRS[DW]}" ;;
-	$'\e[C') move_player "${DIRS[RG]}" ;;
-	$'\e[D') move_player "${DIRS[LF]}" ;;
+	$'\e[A' | w) move_player "${DIRS[UP]}" ;;
+	$'\e[B' | s) move_player "${DIRS[DW]}" ;;
+	$'\e[C' | d) move_player "${DIRS[RG]}" ;;
+	$'\e[D' | a) move_player "${DIRS[LF]}" ;;
+	' ') select_tile "$player_pos" ;;
+	r) init_board ;;
+	*) exit 1 ;;
 	esac
 }
 
@@ -246,8 +282,7 @@ main() {
 	draw
 
 	while true; do
-		handle_input
-		draw
+		handle_input && draw
 	done
 }
 
