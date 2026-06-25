@@ -13,7 +13,9 @@ curl eiguchipablo.dev/minesweeper | bash
 
 - `-h` – show the help/controls screen.
 - `-s WIDTHxHEIGHT` – choose the board size (default `8x8`).
+- `-f` - set full screen size board.
 - `-m MINES` – set the mine count (default `10`).
+- `-p PERCENT` - set mines to a percentage of total tiles.
 
 ### Controls
 

@@ -73,12 +73,14 @@ help() {
 		  R                   Reset the board.
 		  Ctrl+C              Quit the game.
 
-		Usage: ${0##*/} [-h] [-z WIDTHxHEIGHT] [-m MINES]
+		Usage: ${0##*/} [-h] [-s WIDTHxHEIGHT] [-f] [-m MINES] [-p PERCENT]
 
 		Options:
 		  -h                  Show help message.
 		  -s WIDTHxHEIGHT     Set board size (default ${width}x${height}).
+		  -f                  Set full screen size board.
 		  -m MINES            Set the total number of mines (default ${total_mines}).
+		  -p PERCENT          Set mines to a percentage of the total tiles.
 
 		Play at: curl eiguchipablo.dev/minesweeper | bash
 		Github: https://github.com/eigu47/minesweeper.sh
@@ -90,9 +92,8 @@ help() {
 	exit 0
 }
 
-# todo: check max size, add size with %
 parse_args() {
-	while getopts 'hs:m:' opt; do
+	while getopts 'hs:fm:p:d' opt; do
 		case $opt in
 		h) help ;;
 		s)
@@ -100,14 +101,34 @@ parse_args() {
 			width=${BASH_REMATCH[1]}
 			height=${BASH_REMATCH[2]}
 			;;
+		f)
+			width=$(($(tput cols) / 4 - 1))
+			height=$(($(tput lines) / 2 - 3))
+			;;
 		m)
-			[[ $OPTARG =~ ^[0-9]+$ ]] || usage
+			[[ $OPTARG =~ ^[0-9]+$ ]] || help
 			total_mines=$OPTARG
 			;;
+		p)
+			local percent
+			[[ $OPTARG =~ ^[0-9]+$ ]] || help
+			percent=$OPTARG
+			;;
+		d) debug=1 ;;
 		\?) fatal "invalid argument: -$OPTARG" ;;
 		esac
 	done
 	shift $((OPTIND - 1))
+
+	if [[ -n $percent ]]; then
+		total_mines=$((width * height * percent / 100))
+	fi
+
+	# validate args
+	((width < 2)) && width=2
+	((height < 1)) && height=1
+	((total_mines >= width * height)) && total_mines=$((width * height - 1))
+	((total_mines < 0)) && total_mines=1
 }
 
 repeat_append() {
@@ -123,7 +144,7 @@ repeat_append() {
 get_idx() {
 	local -n _idx=$1
 	local row=$2 col=$3
-	((row < 0 || col < 0 || row >= width || col >= height)) && return 1
+	((row < 0 || col < 0 || row >= height || col >= width)) && return 1
 
 	_idx=$((row * width + col))
 }
@@ -135,7 +156,7 @@ get_grid() {
 	_row=$((idx / width))
 	_col=$((idx % width))
 
-	((_row < 0 || _col < 0 || _row >= width || _col >= height)) && return 1
+	((_row < 0 || _col < 0 || _row >= height || _col >= width)) && return 1
 }
 
 build_neighbours() {
@@ -155,12 +176,16 @@ build_neighbours() {
 }
 
 init_board() {
+	# clear terminal
+	stty -echo
+	tput clear
+	tput civis
+
 	# reset game
 	board=()
 	mines=()
 	selected=()
 	player_pos=0
-	tput clear
 
 	# initiate board
 	local i
@@ -238,6 +263,13 @@ draw() {
 	tput cup 0 0
 	echo -e "$grid"
 	draw_tile "$player_pos"
+
+	if [[ -n $debug ]]; then
+		local idx
+		for idx in "${!board[@]}"; do
+			draw_tile "$idx"
+		done
+	fi
 }
 
 draw_tile() {
@@ -263,6 +295,9 @@ draw_tile() {
 		fi
 		((idx == player_pos)) && color=${STYLE[GREEN]}
 	fi
+
+	# draw tile for debug
+	[[ -n $debug ]] && tile=$val
 
 	tile="$color $tile ${STYLE[RST]}"
 
@@ -313,7 +348,7 @@ reveal_tile() {
 select_tile() {
 	local pos=$1
 	# already selected tiles does nothing
-	[[ -n ${selected[$pos]} ]] && return
+	[[ -n ${selected[$pos]} ]] || ((player_pos < 0)) && return
 
 	reveal_tile "$pos"
 
@@ -371,24 +406,6 @@ handle_input() {
 	esac
 }
 
-main() {
-	parse_args "$@"
-
-	build_neighbours
-
-	# clear terminal
-	stty -echo
-	tput clear
-	tput civis
-
-	init_board
-	draw
-
-	while true; do
-		handle_input
-	done
-}
-
 cleanup() {
 	stty echo
 	tput sgr0
@@ -396,6 +413,19 @@ cleanup() {
 	tput cup $((height * 2 + 4)) 0
 	exit 0
 }
-trap cleanup INT TERM EXIT
+
+main() {
+	parse_args "$@"
+
+	trap cleanup INT TERM EXIT
+
+	build_neighbours
+	init_board
+	draw
+
+	while true; do
+		handle_input
+	done
+}
 
 main "$@"
