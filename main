@@ -138,9 +138,8 @@ get_grid() {
 	((_row < 0 || _col < 0 || _row >= width || _col >= height)) && return 1
 }
 
-# todo: optimize?
 build_neighbours() {
-	local idx row col dir dy dx n_idx n_list=()
+	local idx row col dir dy dx n_idx n_list
 	# loop over all tiles, precompute all neighbours
 	for ((idx = 0; idx < width * height; idx++)); do
 		n_list=()
@@ -241,15 +240,14 @@ draw() {
 	draw_tile "$player_pos"
 }
 
-get_tile() {
-	local -n _tile=$1
-	local pos=$2 color=${STYLE[GRAY]} symbol=" "
-	local val=${board[$pos]}
+draw_tile() {
+	local idx=$1 color=${STYLE[GRAY]} tile=" "
+	local val=${board[$idx]}
 
 	# game over
 	if ((player_pos < 0)); then
 		# reveal tile
-		[[ $val != '0' ]] && symbol=$val
+		[[ $val != '0' ]] && tile=$val
 		# win mine color
 		if [[ $val == '*' ]] && ((player_pos == -2)); then
 			color=${STYLE[GREEN]}
@@ -257,29 +255,21 @@ get_tile() {
 			color=${STYLE[$val]}
 		fi
 
-		_tile="$color $symbol ${STYLE[RST]}"
-		return
+	# game is not over
+	else
+		if [[ -n ${selected[$idx]} ]]; then
+			[[ $val != '0' ]] && tile=$val
+			color=${STYLE[$val]}
+		fi
+		((idx == player_pos)) && color=${STYLE[GREEN]}
 	fi
 
-	# not game over
-	if [[ -n ${selected[$pos]} ]]; then
-		[[ $val != '0' ]] && symbol=$val
-		color=${STYLE[$val]}
-	fi
+	tile="$color $tile ${STYLE[RST]}"
 
-	((pos == player_pos)) && color=${STYLE[GREEN]}
-
-	_tile="$color $symbol ${STYLE[RST]}"
-}
-
-draw_tile() {
-	local idx=$1 tile
 	# calculate coords for cursor
 	local row=$((idx / width)) col=$((idx % width))
 	row=$((row * 2 + 3))
 	col=$((col * 4 + 1))
-
-	get_tile tile "$idx"
 
 	tput cup "$row" "$col"
 	echo -e "$tile"
@@ -305,50 +295,57 @@ move_player() {
 	draw_tile "$player_pos"
 }
 
-select_tile() {
-	local pos=$1 idx
-	# already selected tiles does nothing
+reveal_tile() {
+	local pos=$1
 	[[ -n ${selected[$pos]} ]] && return
 
 	selected[$pos]=1
 	draw_tile "$pos"
-
-	# recursive over all neighbours if theres no mine
+	# recurse over all neighbours if theres no mine
 	if [[ ${board[$pos]} == '0' ]]; then
+		local idx
 		for idx in ${neighbours[$pos]}; do
-			select_tile "$idx"
+			reveal_tile "$idx"
 		done
-		return
 	fi
+}
 
-	local msg face
+select_tile() {
+	local pos=$1
+	# already selected tiles does nothing
+	[[ -n ${selected[$pos]} ]] && return
+
+	reveal_tile "$pos"
+
+	local msg face curr_pos=$player_pos
 	# if its a mine, game over
 	if [[ ${board[$pos]} == '*' ]]; then
 		player_pos=-1
 		msg='You lose!'
 		face=':('
-	fi
 
 	# if all non mines are selected, win
-	if ((${#selected[@]} + total_mines == width * height)); then
+	elif ((${#selected[@]} + total_mines == width * height)); then
 		player_pos=-2
 		msg='You win!'
 		face='8)'
+
+	# game not over
+	else
+		return
 	fi
 
-	if ((player_pos<0)); then
-		draw_tile "$pos"
-		tput cup 1 $((width * 4 / 2))
-		echo "$face"
+	draw_tile "$curr_pos"
+	tput cup 1 $((width * 4 / 2))
+	echo "$face"
 
-		# reveal mines
-		for idx in "${mines[@]}"; do
-			draw_tile "$idx"
-		done
+	# reveal mines
+	for idx in "${mines[@]}"; do
+		draw_tile "$idx"
+	done
 
-		tput cup $((height * 2 + 3)) 0
-		echo "$msg Press 'R' to play again"
-	fi
+	tput cup $((height * 2 + 3)) 0
+	echo "$msg Press 'R' to play again"
 }
 
 handle_input() {
