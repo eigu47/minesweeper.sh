@@ -17,6 +17,11 @@ curl eiguchipablo.dev/minesweeper | bash
 - `-m MINES` – set the mine count (default `10`).
 - `-p PERCENT` - set mines to a percentage of total tiles.
 
+If you want to pass options when piping from `curl`, append them after `bash -s --`, like this:
+```bash
+curl eiguchipablo.dev/minesweeper | bash -s -- -s 16x16 -m 40
+```
+
 ### Controls
 
 - Arrow keys or `WASD` – move the cursor (wraps around the edges).
