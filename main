@@ -131,6 +131,26 @@ parse_args() {
 	((total_mines < 0)) && total_mines=1
 }
 
+cleanup() {
+	stty echo
+	tput sgr0
+	tput cnorm
+	tput cup $((height * 2 + 4)) 0
+	exit 0
+}
+
+init_game() {
+	trap cleanup INT TERM EXIT
+
+	# clear terminal
+	stty -echo
+	tput clear
+	tput civis
+
+	# read from tty if its piped so can run curl ... | bash
+	[[ -t 0 ]] || exec </dev/tty
+}
+
 repeat_append() {
 	local -n _out=$1
 	local str=$2 count=$3 i
@@ -176,16 +196,12 @@ build_neighbours() {
 }
 
 init_board() {
-	# clear terminal
-	stty -echo
-	tput clear
-	tput civis
-
 	# reset game
 	board=()
 	mines=()
 	selected=()
 	player_pos=0
+	tput clear
 
 	# initiate board
 	local i
@@ -406,19 +422,10 @@ handle_input() {
 	esac
 }
 
-cleanup() {
-	stty echo
-	tput sgr0
-	tput cnorm
-	tput cup $((height * 2 + 4)) 0
-	exit 0
-}
-
 main() {
 	parse_args "$@"
 
-	trap cleanup INT TERM EXIT
-
+	init_game
 	build_neighbours
 	init_board
 	draw
