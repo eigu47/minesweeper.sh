@@ -142,13 +142,13 @@ cleanup() {
 init_game() {
 	trap cleanup INT TERM EXIT
 
+	# read from tty if its piped so can run curl ... | bash
+	[[ -t 0 ]] || exec </dev/tty
+
 	# clear terminal
 	stty -echo
 	tput clear
 	tput civis
-
-	# read from tty if its piped so can run curl ... | bash
-	[[ -t 0 ]] || exec </dev/tty
 }
 
 repeat_append() {
