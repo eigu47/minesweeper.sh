@@ -27,4 +27,5 @@ curl eiguchipablo.dev/minesweeper | bash -s -- -s 16x16 -m 40
 - Arrow keys or `WASD` – move the cursor (wraps around the edges).
 - `Space` or `Enter` – reveal the tile under the cursor.
 - `R` – restart the board.
+- `H` - show help/controls.
 - `Ctrl+C` – quit game.
