@@ -92,7 +92,7 @@ help() {
 }
 
 polyfill() {
-	# tput shim
+	# use ansi if no tput
 	if ! command -v tput &>/dev/null; then
 		tput() {
 			case $1 in
@@ -102,8 +102,8 @@ polyfill() {
 			cnorm) printf '\e[?25h' ;;
 			sgr0) printf '\e[0m' ;;
 			ed) printf '\e[J' ;;
-			cols) printf '%d' "$COLUMNS" ;;
-			lines) printf '%d' "$LINES" ;;
+			cols) printf '%d' "${COLUMNS:-80}" ;;
+			lines) printf '%d' "${LINES:-24}" ;;
 			esac
 		}
 	fi
