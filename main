@@ -61,7 +61,7 @@ mines=()
 declare -A selected=()
 
 fatal() {
-	echo '[FATAL]:' "$*" >&2
+	printf '[FATAL]: %s\n' "$*" >&2
 	exit 1
 }
 
@@ -143,6 +143,22 @@ cleanup() {
 }
 
 init_game() {
+	# tput shim
+	if ! command -v tput &>/dev/null; then
+		tput() {
+			case $1 in
+			clear) printf '\e[2J' ;;
+			cup) printf '\e[%d;%dH' $(($2 + 1)) $(($3 + 1)) ;;
+			civis) printf '\e[?25l' ;;
+			cnorm) printf '\e[?25h' ;;
+			sgr0) printf '\e[0m' ;;
+			ed) printf '\e[J' ;;
+			cols) printf '%d' "$COLUMNS" ;;
+			lines) printf '%d' "$LINES" ;;
+			esac
+		}
+	fi
+
 	trap cleanup INT TERM EXIT
 
 	# read from tty if its piped so can run curl ... | bash
@@ -286,7 +302,7 @@ draw() {
 
 	tput clear
 	tput cup 0 0
-	echo -e "$grid"
+	printf '%b' "$grid"
 }
 
 get_tile() {
@@ -332,7 +348,7 @@ draw_tile() {
 	col=$((col * 4 + 1))
 
 	tput cup "$row" "$col"
-	echo -e "$tile"
+	printf '%b' "$tile"
 }
 
 move_player() {
@@ -397,7 +413,7 @@ select_tile() {
 
 	draw_tile "$curr_pos"
 	tput cup 1 $((width * 4 / 2))
-	echo "$face"
+	printf '%s' "$face"
 
 	# reveal mines
 	for idx in "${mines[@]}"; do
@@ -405,7 +421,7 @@ select_tile() {
 	done
 
 	tput cup $((height * 2 + 3)) 0
-	echo "$msg Press 'R' to play again"
+	printf '%s' "$msg Press 'R' to play again"
 }
 
 clear_help_msg() {
