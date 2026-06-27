@@ -91,6 +91,24 @@ help() {
 	EOF
 }
 
+polyfill() {
+	# tput shim
+	if ! command -v tput &>/dev/null; then
+		tput() {
+			case $1 in
+			clear) printf '\e[2J' ;;
+			cup) printf '\e[%d;%dH' $(($2 + 1)) $(($3 + 1)) ;;
+			civis) printf '\e[?25l' ;;
+			cnorm) printf '\e[?25h' ;;
+			sgr0) printf '\e[0m' ;;
+			ed) printf '\e[J' ;;
+			cols) printf '%d' "$COLUMNS" ;;
+			lines) printf '%d' "$LINES" ;;
+			esac
+		}
+	fi
+}
+
 parse_args() {
 	while getopts 'hs:fm:p:d' opt; do
 		case $opt in
@@ -143,22 +161,6 @@ cleanup() {
 }
 
 init_game() {
-	# tput shim
-	if ! command -v tput &>/dev/null; then
-		tput() {
-			case $1 in
-			clear) printf '\e[2J' ;;
-			cup) printf '\e[%d;%dH' $(($2 + 1)) $(($3 + 1)) ;;
-			civis) printf '\e[?25l' ;;
-			cnorm) printf '\e[?25h' ;;
-			sgr0) printf '\e[0m' ;;
-			ed) printf '\e[J' ;;
-			cols) printf '%d' "$COLUMNS" ;;
-			lines) printf '%d' "$LINES" ;;
-			esac
-		}
-	fi
-
 	trap cleanup INT TERM EXIT
 
 	# read from tty if its piped so can run curl ... | bash
@@ -461,6 +463,7 @@ handle_input() {
 }
 
 main() {
+	polyfill
 	parse_args "$@"
 
 	init_game
