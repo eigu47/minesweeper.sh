@@ -428,8 +428,8 @@ select_tile() {
 
 clear_help_msg() {
 	[[ -z $show_help ]] && return
-	unset show_help
 	draw
+	unset show_help
 }
 
 handle_input() {
